@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ShotAsk — Result</title>
+  <style>
+    :root {
+      --void-deep: #010109;
+      --void: #040412;
+      --void-surface: #08081c;
+      --void-border: #141432;
+      --phosphor-cyan: #00f0ff;
+      --phosphor-cyan-dim: #006670;
+      --phosphor-magenta: #ff00e5;
+      --phosphor-green: #00ff88;
+      --text-primary: #e2e8f2;
+      --text-secondary: #9dacc4;
+      --text-muted: #6b7d99;
+      --text-phosphor: #c4f4ff;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes terminal-blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+    @keyframes text-reveal {
+      from { opacity: 0; clip-path: inset(0 0 0 100%); }
+      to { opacity: 1; clip-path: inset(0 0 0 0); }
+    }
+
+    body {
+      font-family: 'JetBrains Mono', 'Cascadia Code', monospace;
+      background: var(--void-deep);
+      color: var(--text-primary);
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      height: 100vh;
+    }
+
+    .content-area {
+      height: 100vh;
+      overflow-y: auto;
+      font-size: 11px;
+      line-height: 1.8;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* AI response text area */
+    .response-area {
+      flex: 1;
+      padding: 14px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Loading state */
+    .loading-wrapper {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      padding: 14px;
+    }
+
+    .loader-dual-ring {
+      width: 36px; height: 36px;
+      position: relative;
+      margin-bottom: 16px;
+    }
+
+    .loader-dual-ring::before {
+      content: '';
+      position: absolute;
+      inset: 2px;
+      border: 2px solid rgba(0,240,255,0.08);
+      border-top-color: var(--phosphor-cyan);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      box-shadow: 0 0 12px rgba(0,240,255,0.2);
+    }
+
+    .loader-dual-ring::after {
+      content: '';
+      position: absolute;
+      inset: 8px;
+      border: 1.5px solid rgba(0,240,255,0.05);
+      border-bottom-color: rgba(0,240,255,0.3);
+      border-radius: 50%;
+      animation: spin 1.5s linear infinite reverse;
+    }
+
+    .loading-label {
+      font-family: 'Orbitron', system-ui, sans-serif;
+      font-size: 9px;
+      letter-spacing: 4px;
+      color: var(--phosphor-cyan);
+      animation: terminal-blink 1.5s step-end infinite;
+    }
+
+    .loading-sub {
+      font-size: 8px;
+      color: var(--text-muted);
+      letter-spacing: 2px;
+      margin-top: 6px;
+    }
+
+    /* Raw streaming text */
+    .response-text.raw {
+      white-space: pre-wrap;
+      word-break: break-word;
+      line-height: 1.8;
+    }
+
+    /* Markdown content styles */
+    .response-text {
+      color: var(--text-primary);
+      word-break: break-word;
+      animation: text-reveal 0.6s ease-out;
+      line-height: 1.7;
+    }
+
+    .response-text h1, .response-text h2, .response-text h3, .response-text h4 {
+      font-family: 'Orbitron', system-ui, sans-serif;
+      color: var(--phosphor-cyan);
+      margin: 16px 0 8px;
+      letter-spacing: 2px;
+    }
+    .response-text h1 { font-size: 15px; }
+    .response-text h2 { font-size: 13px; }
+    .response-text h3 { font-size: 12px; }
+
+    .response-text p { margin: 4px 0 8px; }
+
+    .response-text strong { color: var(--phosphor-cyan); font-weight: 600; }
+    .response-text em { color: var(--text-phosphor); }
+
+    .response-text code {
+      font-family: 'JetBrains Mono', monospace;
+      background: rgba(0,240,255,0.08);
+      padding: 1px 6px;
+      border-radius: 2px;
+      font-size: 10px;
+      color: var(--phosphor-cyan);
+    }
+
+    .response-text pre {
+      background: var(--void-deep);
+      border: 1px solid var(--void-border);
+      border-radius: 6px;
+      padding: 12px;
+      margin: 10px 0;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    .response-text pre code {
+      background: none;
+      padding: 0;
+      font-size: 10px;
+      color: var(--text-primary);
+      line-height: 1.6;
+      white-space: pre-wrap;
+    }
+
+    .response-text ul, .response-text ol {
+      padding-left: 20px;
+      margin: 6px 0;
+    }
+    .response-text li { margin: 2px 0; }
+    .response-text li::marker { color: var(--phosphor-cyan-dim); }
+
+    .response-text blockquote {
+      border-left: 2px solid var(--phosphor-cyan);
+      padding: 4px 12px;
+      margin: 8px 0;
+      color: var(--text-secondary);
+      background: rgba(0,240,255,0.03);
+    }
+
+    .response-text a {
+      color: var(--phosphor-cyan);
+      text-decoration: underline;
+    }
+
+    .response-text hr {
+      border: none;
+      border-top: 1px solid var(--void-border);
+      margin: 14px 0;
+    }
+
+    .response-text table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 10px 0;
+      font-size: 10px;
+    }
+    .response-text th, .response-text td {
+      border: 1px solid var(--void-border);
+      padding: 6px 10px;
+      text-align: left;
+    }
+    .response-text th {
+      background: rgba(0,240,255,0.06);
+      color: var(--phosphor-cyan);
+      font-weight: 600;
+    }
+
+    .cursor-blink {
+      display: inline-block;
+      width: 7px; height: 13px;
+      background: var(--phosphor-cyan);
+      margin-left: 3px;
+      vertical-align: text-bottom;
+      animation: terminal-blink 1s step-end infinite;
+      box-shadow: 0 0 8px var(--phosphor-cyan);
+    }
+
+    /* Chat bubbles */
+    .chat-bubble {
+      max-width: 88%;
+      padding: 8px 12px;
+      margin: 6px 0;
+      border-radius: 6px;
+      font-size: 10px;
+      line-height: 1.6;
+      word-break: break-word;
+      animation: text-reveal 0.4s ease-out;
+    }
+
+    .chat-bubble.user {
+      align-self: flex-end;
+      background: rgba(0,240,255,0.08);
+      border: 1px solid rgba(0,240,255,0.15);
+      color: var(--phosphor-cyan);
+      white-space: pre-wrap;
+    }
+
+    .chat-bubble.user.has-image {
+      padding: 4px;
+      background: transparent;
+      border: 1px solid var(--void-border);
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+
+    .chat-bubble.user.has-image:hover {
+      border-color: var(--phosphor-cyan);
+      box-shadow: 0 0 12px rgba(0,240,255,0.15);
+    }
+
+    .chat-bubble.user.has-image img {
+      display: block;
+      max-width: 100%;
+      max-height: 200px;
+      border-radius: 4px;
+      object-fit: contain;
+    }
+
+    .chat-bubble.user.has-image.expanded {
+      max-width: 100%;
+    }
+
+    .chat-bubble.user.has-image.expanded img {
+      max-height: 360px;
+    }
+
+    .chat-bubble.assistant {
+      align-self: flex-start;
+      background: var(--void-surface);
+      border: 1px solid var(--void-border);
+      color: var(--text-primary);
+    }
+
+    .chat-bubble.assistant h1,
+    .chat-bubble.assistant h2,
+    .chat-bubble.assistant h3,
+    .chat-bubble.assistant h4 {
+      font-family: 'Orbitron', system-ui, sans-serif;
+      color: var(--phosphor-cyan);
+      margin: 10px 0 6px;
+      letter-spacing: 1px;
+      font-size: 11px;
+    }
+
+    .chat-bubble.assistant p { margin: 3px 0 6px; }
+    .chat-bubble.assistant strong { color: var(--phosphor-cyan); }
+    .chat-bubble.assistant em { color: var(--text-phosphor); }
+
+    .chat-bubble.assistant code {
+      font-family: 'JetBrains Mono', monospace;
+      background: rgba(0,240,255,0.08);
+      padding: 1px 5px;
+      border-radius: 2px;
+      font-size: 9px;
+      color: var(--phosphor-cyan);
+    }
+
+    .chat-bubble.assistant pre {
+      background: var(--void-deep);
+      border: 1px solid var(--void-border);
+      border-radius: 4px;
+      padding: 8px;
+      margin: 6px 0;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    .chat-bubble.assistant pre code {
+      background: none;
+      padding: 0;
+      font-size: 9px;
+      color: var(--text-primary);
+    }
+
+    .chat-bubble.assistant ul,
+    .chat-bubble.assistant ol {
+      padding-left: 16px;
+      margin: 4px 0;
+    }
+
+    .chat-bubble.assistant li::marker { color: var(--phosphor-cyan-dim); }
+
+    .chat-bubble.assistant blockquote {
+      border-left: 2px solid var(--phosphor-cyan);
+      padding: 2px 10px;
+      margin: 4px 0;
+      color: var(--text-secondary);
+    }
+
+    .chat-bubble.assistant a { color: var(--phosphor-cyan); }
+
+    .chat-bubble.assistant table {
+      border-collapse: collapse;
+      font-size: 9px;
+      margin: 6px 0;
+      width: 100%;
+    }
+
+    .chat-bubble.assistant th,
+    .chat-bubble.assistant td {
+      border: 1px solid var(--void-border);
+      padding: 4px 8px;
+      text-align: left;
+    }
+
+    .chat-bubble.assistant th {
+      background: rgba(0,240,255,0.06);
+      color: var(--phosphor-cyan);
+    }
+
+    /* Chat input bar */
+    .chat-bar {
+      flex-shrink: 0;
+      display: none;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-top: 1px solid var(--void-border);
+      background: var(--void);
+    }
+
+    .chat-input {
+      flex: 1;
+      padding: 8px 12px;
+      background: var(--void-deep);
+      border: 1px solid var(--void-border);
+      color: var(--text-primary);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      outline: none;
+      border-radius: 4px;
+      transition: all 0.3s;
+    }
+
+    .chat-input:focus {
+      border-color: var(--phosphor-cyan);
+      box-shadow: 0 0 10px rgba(0,240,255,0.1);
+    }
+
+    .chat-input::placeholder {
+      color: var(--text-muted);
+    }
+
+    .chat-send-btn {
+      flex-shrink: 0;
+      width: 34px; height: 34px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0,240,255,0.08);
+      border: 1px solid var(--phosphor-cyan-dim);
+      color: var(--phosphor-cyan);
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+
+    .chat-send-btn:hover {
+      background: rgba(0,240,255,0.18);
+      box-shadow: 0 0 12px rgba(0,240,255,0.25);
+    }
+
+    .chat-send-btn:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    ::-webkit-scrollbar { width: 2px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(0,240,255,0.1);
+      border-radius: 1px;
+    }
+
+    /* Zoom hint */
+    .zoom-hint-bar {
+      flex-shrink: 0;
+      display: none;
+      text-align: center;
+      padding: 3px 0;
+      font-size: 8px;
+      color: var(--text-muted);
+      letter-spacing: 1px;
+      opacity: 0.5;
+      background: var(--void);
+      border-top: 1px solid var(--void-border);
+    }
+
+    /* KaTeX display math */
+    .katex-display {
+      margin: 12px 0;
+      overflow-x: auto;
+      overflow-y: hidden;
+    }
+    .katex-display > .katex {
+      display: flex;
+      justify-content: center;
+    }
+    .chat-bubble .katex { font-size: 1.05em; }
+  </style>
+</head>
+<body>
+  <div class="content-area" id="content-area">
+    <div class="response-area" id="response-area">
+      <div class="loading-wrapper">
+        <div class="loader-dual-ring"></div>
+        <div class="loading-label" data-i18n="result.analyzing">ANALYZING</div>
+        <div class="loading-sub" data-i18n="result.processing">processing screenshot</div>
+      </div>
+    </div>
+
+    <!-- Chat input -->
+    <div class="zoom-hint-bar" id="zoom-hint-bar">Ctrl+Scroll to zoom</div>
+    <div class="chat-bar" id="chat-bar">
+      <input
+        type="text"
+        id="chat-input"
+        class="chat-input"
+        data-i18n-placeholder="result.placeholder"
+        placeholder="Ask a follow-up question..."
+        autocomplete="off"
+      />
+      <button id="chat-send-btn" class="chat-send-btn" data-i18n-title="result.send" title="Send">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M22 2L11 13"/><path d="M22 2L15 22L11 13L2 9L22 2Z"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <script type="module" src="/src/result.ts"></script>
+</body>
+</html>

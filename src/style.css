@@ -1,0 +1,414 @@
+/* ============================================
+   ShotAsk — Phosphor Void / Alien Terminal
+   Aesthetic: Brutalist Cyberpunk + CRT Nostalgia
+   ============================================ */
+
+:root {
+  /* Void blacks */
+  --void-deep: #010109;
+  --void: #040412;
+  --void-surface: #08081c;
+  --void-elevated: #0c0c24;
+  --void-border: #141432;
+
+  /* Phosphor neon accents */
+  --phosphor-cyan: #00f0ff;
+  --phosphor-cyan-dim: #006670;
+  --phosphor-magenta: #ff00e5;
+  --phosphor-green: #00ff88;
+  --phosphor-amber: #ff9900;
+  --phosphor-blue: #3366ff;
+
+  /* Text */
+  --text-primary: #e2e8f2;
+  --text-secondary: #9dacc4;
+  --text-muted: #6b7d99;
+  --text-phosphor: #c4f4ff;
+
+  /* CRT effect intensity */
+  --scanline-opacity: 0.06;
+  --flicker-speed: 0.15s;
+
+  /* Fonts */
+  --font-display: 'Orbitron', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+  --font-terminal: 'JetBrains Mono', monospace;
+
+  /* Spacing */
+  --space-unit: 4px;
+}
+
+/* ============================================
+   BASE RESET
+   ============================================ */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--void-deep);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* ============================================
+   VIGNETTE OVERLAY
+   ============================================ */
+
+.vignette-overlay {
+  position: relative;
+}
+
+.vignette-overlay::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(ellipse at center, transparent 60%, rgba(1, 1, 9, 0.6) 100%);
+  pointer-events: none;
+  z-index: 99998;
+}
+
+/* ============================================
+   DATA STREAM BACKGROUND
+   ============================================ */
+
+.data-stream-bg {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.data-stream-bg .stream-column {
+  position: absolute;
+  top: -100%;
+  width: 1px;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    var(--phosphor-cyan-dim) 20%,
+    var(--phosphor-cyan) 50%,
+    var(--phosphor-cyan-dim) 80%,
+    transparent 100%
+  );
+  animation: data-fall linear infinite;
+  opacity: 0;
+}
+
+@keyframes data-fall {
+  0% { transform: translateY(-100%); opacity: 0; }
+  5% { opacity: 0.6; }
+  10% { opacity: 0.15; }
+  90% { opacity: 0.15; }
+  95% { opacity: 0.6; }
+  100% { transform: translateY(100vh); opacity: 0; }
+}
+
+/* ============================================
+   HEX GRID BACKGROUND
+   ============================================ */
+
+.hex-bg {
+  position: absolute;
+  inset: 0;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='52'%3E%3Cpath d='M30 0l30 17.3v34.6L30 69.3 0 52V17.3z' fill='none' stroke='%23141432' stroke-width='0.5'/%3E%3C/svg%3E");
+  background-size: 60px 52px;
+  opacity: 0.4;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ============================================
+   KEYFRAMES — GLOW & FLICKER
+   ============================================ */
+
+@keyframes phosphor-pulse {
+  0%, 100% {
+    text-shadow:
+      0 0 4px var(--phosphor-cyan),
+      0 0 8px var(--phosphor-cyan-dim),
+      0 0 16px rgba(0, 240, 255, 0.4);
+  }
+  50% {
+    text-shadow:
+      0 0 8px var(--phosphor-cyan),
+      0 0 16px var(--phosphor-cyan-dim),
+      0 0 32px rgba(0, 240, 255, 0.6),
+      0 0 48px rgba(0, 240, 255, 0.2);
+  }
+}
+
+@keyframes neon-flicker {
+  0%, 19%, 21%, 23%, 25%, 54%, 56%, 100% {
+    opacity: 1;
+  }
+  20%, 24%, 55% {
+    opacity: 0.6;
+  }
+}
+
+@keyframes border-chase {
+  0% { border-color: var(--phosphor-cyan); }
+  25% { border-color: var(--phosphor-magenta); }
+  50% { border-color: var(--phosphor-blue); }
+  75% { border-color: var(--phosphor-green); }
+  100% { border-color: var(--phosphor-cyan); }
+}
+
+@keyframes glitch-shift {
+  0%, 100% { transform: translate(0); }
+  2% { transform: translate(-2px, 1px); }
+  4% { transform: translate(2px, -1px); }
+  6% { transform: translate(0); }
+  92% { transform: translate(0); }
+  94% { transform: translate(1px, 2px); }
+  96% { transform: translate(-1px, -2px); }
+  98% { transform: translate(0); }
+}
+
+@keyframes holographic-shimmer {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes terminal-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+@keyframes spin-electron {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes slide-up-fade {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes reveal-right {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes scan-vertical {
+  0% { top: -2px; }
+  100% { top: 100%; }
+}
+
+@keyframes text-glitch-in {
+  0% { opacity: 0; clip-path: inset(0 100% 0 0); }
+  60% { opacity: 1; clip-path: inset(0 0 0 0); }
+  80% { clip-path: inset(20% -5% 10% -5%); }
+  100% { clip-path: inset(0 0 0 0); }
+}
+
+/* ============================================
+   CLICK RIPPLE
+   ============================================ */
+
+@keyframes ripple-expand {
+  0% { width: 0; height: 0; opacity: 0.5; }
+  100% { width: 400px; height: 400px; opacity: 0; }
+}
+
+.ripple-effect {
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid var(--phosphor-cyan);
+  background: rgba(0, 240, 255, 0.1);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  animation: ripple-expand 0.6s ease-out forwards;
+}
+
+/* ============================================
+   HOVER GLOW SWEEP
+   ============================================ */
+
+@keyframes glow-sweep {
+  0% { left: -100%; }
+  100% { left: 100%; }
+}
+
+.hover-sweep {
+  position: relative;
+  overflow: hidden;
+}
+
+.hover-sweep::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(0, 240, 255, 0.06) 40%,
+    rgba(0, 240, 255, 0.1) 50%,
+    rgba(0, 240, 255, 0.06) 60%,
+    transparent 100%
+  );
+  pointer-events: none;
+  transition: none;
+}
+
+.hover-sweep:hover::after {
+  animation: glow-sweep 0.8s ease-out;
+}
+
+/* ============================================
+   BUTTON ACTIVE PRESS
+   ============================================ */
+
+@keyframes btn-press {
+  0% { transform: scale(1); }
+  50% { transform: scale(0.95); }
+  100% { transform: scale(1); }
+}
+
+.btn-press:active {
+  animation: btn-press 0.2s ease-out;
+}
+
+/* ============================================
+   INPUT FOCUS PULSE
+   ============================================ */
+
+@keyframes focus-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(0, 240, 255, 0.3); }
+  70% { box-shadow: 0 0 0 6px rgba(0, 240, 255, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(0, 240, 255, 0); }
+}
+
+.input-glow:focus {
+  animation: focus-pulse 1.5s ease-out infinite;
+  border-color: var(--phosphor-cyan) !important;
+}
+
+/* ============================================
+   ZOOM HINT
+   ============================================ */
+
+.zoom-hint {
+  font-size: 8px;
+  color: var(--text-muted);
+  letter-spacing: 1px;
+  opacity: 0;
+  transition: opacity 0.5s;
+  pointer-events: none;
+}
+
+.zoom-hint.visible {
+  opacity: 0.6;
+}
+
+/* ============================================
+   SCROLLBAR
+   ============================================ */
+
+::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar-track {
+  background: var(--void);
+  border-left: 1px solid var(--void-border);
+}
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, var(--phosphor-cyan-dim), var(--phosphor-cyan));
+  border-radius: 1px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--phosphor-cyan);
+}
+
+/* ============================================
+   SELECTION
+   ============================================ */
+
+::selection {
+  background: rgba(0, 240, 255, 0.25);
+  color: var(--text-phosphor);
+  text-shadow: 0 0 4px var(--phosphor-cyan);
+}
+
+/* ============================================
+   GLITCH TEXT UTILITY
+   ============================================ */
+
+.glitch-text {
+  position: relative;
+}
+
+.glitch-text::before,
+.glitch-text::after {
+  content: attr(data-text);
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.glitch-text::before {
+  animation: glitch-shift 3s infinite;
+  color: var(--phosphor-magenta);
+  clip-path: inset(0 0 60% 0);
+  opacity: 0.5;
+}
+
+.glitch-text::after {
+  animation: glitch-shift 2s infinite reverse;
+  color: var(--phosphor-cyan);
+  clip-path: inset(40% 0 0 0);
+  opacity: 0.5;
+}
+
+/* ============================================
+   SCAN LINE ANIMATION (horizontal sweep)
+   ============================================ */
+
+.scan-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(0, 240, 255, 0.3) 20%,
+    rgba(0, 240, 255, 0.6) 50%,
+    rgba(0, 240, 255, 0.3) 80%,
+    transparent 100%
+  );
+  animation: scan-vertical 4s linear infinite;
+  pointer-events: none;
+  z-index: 100;
+  box-shadow: 0 0 8px rgba(0, 240, 255, 0.4);
+}

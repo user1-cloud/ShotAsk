@@ -1,0 +1,22 @@
+# Dependencies (irrelevant to Claude)
+node_modules/
+
+# Build artifacts
+dist/
+src-tauri/target/
+src-tauri/gen/
+
+# Lockfile (large, rarely relevant)
+pnpm-lock.yaml
+src-tauri/Cargo.lock
+
+# VCS
+.git/
+
+# OS noise
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

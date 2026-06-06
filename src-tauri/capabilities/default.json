@@ -1,0 +1,25 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nickkuk/nickkuk.github.io/main/src/schemas/tauri-2-schema.json",
+  "identifier": "default",
+  "description": "Capability for the main window",
+  "windows": ["main", "overlay", "result"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-close",
+    "core:window:allow-hide",
+    "core:window:allow-show",
+    "core:window:allow-set-position",
+    "core:window:allow-set-size",
+    "core:window:allow-set-fullscreen",
+    "core:window:allow-set-always-on-top",
+    "core:window:allow-set-skip-taskbar",
+    "core:event:allow-emit",
+    "core:event:allow-listen",
+    "global-shortcut:default",
+    "global-shortcut:allow-register",
+    "global-shortcut:allow-unregister",
+    "global-shortcut:allow-is-registered",
+    "shell:default",
+    "core:webview:allow-set-webview-zoom"
+  ]
+}
