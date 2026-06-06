@@ -56,6 +56,7 @@ const zhCN: Translations = {
   // main.ts / index.html
   'main.initializing': '系统初始化中',
   'main.version': 'SHOTASK v1.0.0',
+  'app.zoomHint': 'Ctrl+滚轮 缩放',
 }
 
 const en: Translations = {
@@ -104,6 +105,7 @@ const en: Translations = {
 
   'main.initializing': 'INITIALIZING SYSTEM',
   'main.version': 'SHOTASK v1.0.0',
+  'app.zoomHint': 'Ctrl+Scroll to zoom',
 }
 
 let currentLang: 'zh-CN' | 'en' = 'zh-CN'

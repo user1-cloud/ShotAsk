@@ -82,22 +82,6 @@ export function mountApp(root: HTMLElement) {
         </div>
 
         <div style="display:flex;align-items:center;gap:16px">
-          <!-- Shortcut display -->
-          <div id="shortcut-badge" style="
-            padding:4px 12px;
-            border:1px solid var(--void-border);
-            background:var(--void);
-            font-family:var(--font-mono);
-            font-size:10px;
-            color:var(--phosphor-cyan);
-            letter-spacing:2px;
-            position:relative;
-          ">
-            <span style="position:absolute;top:-1px;left:-1px;width:6px;height:6px;border-top:1px solid var(--phosphor-cyan);border-left:1px solid var(--phosphor-cyan)"></span>
-            <span style="position:absolute;bottom:-1px;right:-1px;width:6px;height:6px;border-bottom:1px solid var(--phosphor-cyan);border-right:1px solid var(--phosphor-cyan)"></span>
-            Alt+S
-          </div>
-
           <!-- Language toggle -->
           <button id="lang-toggle-btn" class="btn-press hover-sweep" style="
             padding:4px 10px;
@@ -442,7 +426,7 @@ export function mountApp(root: HTMLElement) {
             letter-spacing:1px;
           ">Alt+S</kbd> ${t('app.shortcut.toCapture')}
           <span style="color:var(--phosphor-cyan)">]</span>
-          <span style="margin-left:8px;font-size:8px;color:var(--text-muted);letter-spacing:1px">Ctrl+Scroll to zoom</span>
+          <span style="margin-left:8px;font-size:8px;color:var(--text-muted);letter-spacing:1px">${t('app.zoomHint')}</span>
         </span>
       </footer>
     </div>
@@ -526,7 +510,6 @@ async function loadConfig() {
 
 function applyConfig(c: AppConfig) {
   const shortcutField = document.getElementById('shortcut-field') as HTMLInputElement
-  const shortcutBadge = document.getElementById('shortcut-badge')
   const footerShortcut = document.getElementById('footer-shortcut')
   const ollamaEndpoint = document.getElementById('ollama-endpoint') as HTMLInputElement
   const ollamaModel = document.getElementById('ollama-model') as HTMLInputElement
@@ -536,7 +519,6 @@ function applyConfig(c: AppConfig) {
   const systemPrompt = document.getElementById('system-prompt') as HTMLTextAreaElement
 
   if (shortcutField) shortcutField.value = c.shortcut
-  if (shortcutBadge) shortcutBadge.textContent = c.shortcut
   if (footerShortcut) footerShortcut.textContent = c.shortcut
   if (ollamaEndpoint) ollamaEndpoint.value = c.ollama_endpoint
   if (ollamaModel) ollamaModel.value = c.ollama_model
@@ -605,6 +587,7 @@ function setApiType(type: string) {
 let currentApiType: 'Ollama' | 'OpenAI' | 'ZhiPu' | 'Custom' = 'Ollama'
 let recording = false
 let recordedKeys: string[] = []
+let hadNonModifier = false
 
 function bindEvents() {
   // Language toggle
@@ -638,10 +621,11 @@ function bindEvents() {
   const recordBtn = document.getElementById('record-shortcut-btn')!
   const shortcutField = document.getElementById('shortcut-field') as HTMLInputElement
 
-  recordBtn.addEventListener('click', () => {
-    if (recording) { stopRecording(); return }
+  recordBtn.addEventListener('click', async () => {
+    if (recording) { stopRecording(true); return }
     recording = true
     recordedKeys = []
+    hadNonModifier = false
     recordBtn.textContent = t('app.shortcut.recording')
     recordBtn.style.borderColor = 'var(--phosphor-magenta)'
     recordBtn.style.color = 'var(--phosphor-magenta)'
@@ -649,6 +633,7 @@ function bindEvents() {
     shortcutField.value = t('app.shortcut.pressKeys')
     shortcutField.style.borderColor = 'var(--phosphor-magenta)'
     shortcutField.style.boxShadow = '0 0 16px rgba(255,0,229,0.2)'
+    await invoke('disable_current_shortcut').catch(() => {})
   })
 
   document.addEventListener('keydown', (e) => {
@@ -663,6 +648,7 @@ function bindEvents() {
     const key = e.key
     if (!['Control', 'Alt', 'Shift', 'Meta'].includes(key)) {
       keys.push(key.length === 1 ? key.toUpperCase() : key)
+      hadNonModifier = true
     }
     if (keys.length > 0) {
       recordedKeys = keys.filter((k, i, a) => a.indexOf(k) === i)
@@ -671,7 +657,7 @@ function bindEvents() {
   })
 
   document.addEventListener('keyup', () => {
-    if (recording && recordedKeys.length > 0) stopRecording()
+    if (recording && hadNonModifier) stopRecording(false)
   })
 
   document.getElementById('save-btn')!.addEventListener('click', async () => {
@@ -696,9 +682,7 @@ function bindEvents() {
       await invoke('save_config', { config: newConfig })
       config = newConfig
       showStatus(t('app.status.saved'), 'success')
-      const badge = document.getElementById('shortcut-badge')
       const footerKbd = document.getElementById('footer-shortcut')
-      if (badge) badge.textContent = newConfig.shortcut
       if (footerKbd) footerKbd.textContent = newConfig.shortcut
     } catch (e) {
       showStatus(t('app.status.saveFailed') + ': ' + e, 'error')
@@ -724,7 +708,7 @@ function bindEvents() {
   })
 }
 
-function stopRecording() {
+function stopRecording(cancelled: boolean) {
   recording = false
   const recordBtn = document.getElementById('record-shortcut-btn')!
   const shortcutField = document.getElementById('shortcut-field') as HTMLInputElement
@@ -734,6 +718,17 @@ function stopRecording() {
   recordBtn.style.boxShadow = 'none'
   shortcutField.style.borderColor = 'var(--void-border)'
   shortcutField.style.boxShadow = 'none'
+
+  if (cancelled) {
+    invoke('reenable_current_shortcut').catch(() => {})
+  } else if (recordedKeys.length > 0) {
+    const newShortcut = recordedKeys.join('+')
+    invoke('register_new_shortcut', { shortcut: newShortcut }).catch((e) => {
+      console.error('Failed to activate shortcut:', e)
+    })
+    const footerKbd = document.getElementById('footer-shortcut')
+    if (footerKbd) footerKbd.textContent = newShortcut
+  }
 }
 
 function showStatus(msg: string, type: StatusType) {

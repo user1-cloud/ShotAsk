@@ -4,6 +4,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::State;
 use tauri::Emitter;
 use tauri::Manager;
+use tauri_plugin_global_shortcut::GlobalShortcutExt;
 use crate::config::{AppConfig, ApiType};
 use crate::screenshot;
 use crate::ollama;
@@ -24,30 +25,37 @@ pub async fn get_config(state: State<'_, AppState>) -> Result<AppConfig, String>
 pub async fn save_config(
     state: State<'_, AppState>,
     config: AppConfig,
-    app: tauri::AppHandle,
 ) -> Result<(), String> {
     crate::config::save_config(&config).map_err(|e| e.to_string())?;
-    let old_shortcut = state.config.lock().map_err(|e| e.to_string())?.shortcut.clone();
     *state.config.lock().map_err(|e| e.to_string())? = config.clone();
+    Ok(())
+}
 
-    // Re-register shortcut if changed
-    if old_shortcut != config.shortcut {
-        use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
+#[tauri::command]
+pub async fn register_new_shortcut(
+    app: tauri::AppHandle,
+    shortcut: String,
+) -> Result<(), String> {
+    crate::register_global_shortcut(&app, &shortcut)?;
+    log::info!("New shortcut activated: {}", shortcut);
+    Ok(())
+}
 
-        let new_sc: Shortcut = config.shortcut.parse().map_err(|e| format!("Invalid shortcut: {}", e))?;
-        app.global_shortcut().unregister_all().map_err(|e| e.to_string())?;
+#[tauri::command]
+pub async fn disable_current_shortcut(app: tauri::AppHandle) -> Result<(), String> {
+    app.global_shortcut().unregister_all().map_err(|e| e.to_string())?;
+    log::info!("Global shortcut disabled");
+    Ok(())
+}
 
-        let h = app.clone();
-        app.global_shortcut().on_shortcut(new_sc, move |_app, _sc, event| {
-            if event.state == ShortcutState::Pressed {
-                let h = h.clone();
-                tauri::async_runtime::spawn(async move {
-                    crate::trigger_screenshot_flow(&h).await;
-                });
-            }
-        }).map_err(|e| e.to_string())?;
-    }
-
+#[tauri::command]
+pub async fn reenable_current_shortcut(
+    state: State<'_, AppState>,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    let shortcut_str = state.config.lock().map_err(|e| e.to_string())?.shortcut.clone();
+    crate::register_global_shortcut(&app, &shortcut_str)?;
+    log::info!("Global shortcut re-enabled: {}", shortcut_str);
     Ok(())
 }
 
@@ -75,35 +83,54 @@ pub async fn crop_and_ask(
         guard.clone()
     };
 
-    // Show result window with analyzing state
+    // Restore result window — set geometry BEFORE showing to avoid
+    // confusing the window manager (especially on Windows after minimize).
     if let Some(result_win) = app.get_webview_window("result") {
-        let _ = result_win.show();
+        let monitors = screenshot::get_monitor_info().ok();
+        let mut placed = false;
 
-        // Restore saved zoom via global JS function (eval is synchronous/reliable)
+        if let (Some(x), Some(y), Some(w), Some(h)) =
+            (config.result_win_x, config.result_win_y, config.result_win_w, config.result_win_h)
+        {
+            // Validate saved position is actually on-screen
+            let on_screen = monitors.as_ref().map_or(false, |mons| {
+                mons.iter().any(|m| {
+                    x >= m.x && y >= m.y
+                        && x + (w as i32) <= m.x + m.width as i32
+                        && y + (h as i32) <= m.y + m.height as i32
+                })
+            });
+            if on_screen && x > -10000 && y > -10000 {
+                let _ = result_win.set_position(tauri::PhysicalPosition::new(x, y));
+                let _ = result_win.set_size(tauri::PhysicalSize::new(w, h));
+                placed = true;
+            }
+        }
+
+        if !placed {
+            if let Some(ref monitors) = monitors {
+                if let Some(primary) = monitors.first() {
+                    let padding = 40i32;
+                    let win_w = 440i32;
+                    let win_h = 360i32;
+                    let x = primary.x + primary.width as i32 - win_w - padding;
+                    let y = primary.y + primary.height as i32 - win_h - padding;
+                    let _ = result_win.set_position(tauri::PhysicalPosition::new(x.max(0), y.max(0)));
+                    let _ = result_win.set_size(tauri::PhysicalSize::new(win_w as u32, win_h as u32));
+                }
+            }
+        }
+
+        // unminimize() uses SW_RESTORE on Windows, which both unminimizes
+        // and shows the window.
+        let _ = result_win.unminimize();
+        let _ = result_win.show();
+        let _ = result_win.set_focus();
+
+        // Restore saved zoom via global JS function
         let saved_zoom = config.result_win_zoom.unwrap_or(1.0);
         if (saved_zoom - 1.0).abs() > 0.01 {
             let _ = result_win.eval(&format!("window.__shotaskSetZoom({})", saved_zoom));
-        }
-
-        match (config.result_win_x, config.result_win_y, config.result_win_w, config.result_win_h) {
-            (Some(x), Some(y), Some(w), Some(h)) => {
-                let _ = result_win.set_position(tauri::PhysicalPosition::new(x, y));
-                let _ = result_win.set_size(tauri::PhysicalSize::new(w, h));
-            }
-            _ => {
-                // Default: bottom-right corner with padding
-                if let Ok(monitors) = screenshot::get_monitor_info() {
-                    if let Some(primary) = monitors.first() {
-                        let padding = 40i32;
-                        let win_w = 440i32;
-                        let win_h = 360i32;
-                        let x = primary.x + primary.width as i32 - win_w - padding;
-                        let y = primary.y + primary.height as i32 - win_h - padding;
-                        let _ = result_win.set_position(tauri::PhysicalPosition::new(x.max(0), y.max(0)));
-                        let _ = result_win.set_size(tauri::PhysicalSize::new(win_w as u32, win_h as u32));
-                    }
-                }
-            }
         }
     }
 
