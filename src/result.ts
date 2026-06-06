@@ -83,17 +83,14 @@ document.addEventListener('click', (e) => {
 
   const ripple = document.createElement('span')
   ripple.className = 'ripple-effect'
+  ripple.style.position = 'fixed'
   const rect = btn.getBoundingClientRect()
   const size = Math.max(rect.width, rect.height) * 2.5
-  ripple.style.left = (e.clientX - rect.left) + 'px'
-  ripple.style.top = (e.clientY - rect.top) + 'px'
+  ripple.style.left = (e.clientX - size / 2) + 'px'
+  ripple.style.top = (e.clientY - size / 2) + 'px'
   ripple.style.width = ripple.style.height = size + 'px'
 
-  if (getComputedStyle(btn).position === 'static') {
-    btn.style.position = 'relative'
-  }
-  btn.style.overflow = 'hidden'
-  btn.appendChild(ripple)
+  document.body.appendChild(ripple)
   ripple.addEventListener('animationend', () => ripple.remove())
 })
 
