@@ -110,6 +110,14 @@ let fullResponse = ''
 let screenshotB64 = ''
 let conversationHistory: { role: string; content: string }[] = []
 
+// Show screenshot image immediately — before AI streaming starts
+listen<{ image: string; prompt: string }>('show-screenshot', (event) => {
+  screenshotB64 = event.payload.image
+  responseArea.innerHTML = ''
+  appendImageBubble(event.payload.image)
+  appendChatBubble('assistant', '')
+}).catch(console.error)
+
 // Reset content when a new screenshot flow starts
 listen('reset-content', () => {
   resetContent()
@@ -124,7 +132,7 @@ getCurrentWindow().onCloseRequested(async (event) => {
   await getCurrentWindow().hide()
 })
 
-// Streaming chunks — raw text during stream
+// Streaming chunks
 listen<{ text: string }>('ai-stream-chunk', (event) => {
   if (!isStreaming) {
     isStreaming = true
@@ -132,28 +140,20 @@ listen<{ text: string }>('ai-stream-chunk', (event) => {
   }
   fullResponse += event.payload.text
 
-  // If we're in chat mode (conversation started), update the last bubble
-  if (conversationHistory.length > 0) {
-    const bubbles = responseArea.querySelectorAll('.chat-bubble.assistant')
-    const lastBubble = bubbles[bubbles.length - 1]
-    if (lastBubble) {
-      lastBubble.innerHTML = (renderMarkdown(fullResponse) as string) + '<span class="cursor-blink"></span>'
-    }
-  } else {
-    // First response: create text element once, then reuse it
-    let textEl = responseArea.querySelector('.response-text') as HTMLElement | null
-    if (!textEl) {
-      responseArea.innerHTML = ''
-      textEl = document.createElement('div')
-      textEl.className = 'response-text'
-      responseArea.appendChild(textEl)
-    }
-    textEl.innerHTML = (renderMarkdown(fullResponse) as string) + '<span class="cursor-blink"></span>'
+  // Always use chat bubble — find or create last assistant bubble
+  const bubbles = responseArea.querySelectorAll('.chat-bubble.assistant')
+  let bubble = bubbles[bubbles.length - 1] as HTMLElement | undefined
+  if (!bubble) {
+    responseArea.innerHTML = ''
+    bubble = document.createElement('div')
+    bubble.className = 'chat-bubble assistant'
+    responseArea.appendChild(bubble)
   }
+  bubble.innerHTML = (renderMarkdown(fullResponse) as string) + '<span class="cursor-blink"></span>'
   scrollIfAtBottom()
 }).catch(console.error)
 
-// Final response
+// Final response (first screenshot analysis only — follow-ups handled in sendFollowUp)
 listen<{ text: string; image?: string; prompt?: string }>('ai-response', (event) => {
   if (event.payload.image) {
     screenshotB64 = event.payload.image
@@ -163,41 +163,37 @@ listen<{ text: string; image?: string; prompt?: string }>('ai-response', (event)
     fullResponse = event.payload.text
   }
 
-  // Build conversation bubbles
-  if (conversationHistory.length === 0) {
-    // First response: show screenshot image + AI response as chat bubbles
-    if (event.payload.prompt) {
-      conversationHistory.push({ role: 'user', content: event.payload.prompt })
-    }
+  if (event.payload.prompt) {
+    conversationHistory.push({ role: 'user', content: event.payload.prompt })
+  }
 
+  const existingAssistant = responseArea.querySelector('.chat-bubble.assistant') as HTMLElement | null
+
+  if (existingAssistant) {
+    // Streaming case: bubble already created during streaming, finalize it
+    existingAssistant.innerHTML = renderMarkdown(fullResponse) as string
+    if (event.payload.image && !responseArea.querySelector('.chat-bubble.user.has-image')) {
+      const imgBubble = createImageBubble(event.payload.image)
+      existingAssistant.before(imgBubble)
+    }
+  } else {
+    // Non-streaming case: create bubbles from scratch
     responseArea.innerHTML = ''
     if (event.payload.image) {
       appendImageBubble(event.payload.image)
     }
     appendChatBubble('assistant', fullResponse)
-    chatBar.style.display = 'flex'
-    zoomHintBar.style.display = 'block'
-  } else {
-    // Follow-up response: update last assistant bubble
-    const bubbles = responseArea.querySelectorAll('.chat-bubble.assistant')
-    const lastBubble = bubbles[bubbles.length - 1]
-    if (lastBubble) {
-      lastBubble.innerHTML = renderMarkdown(fullResponse) as string
-    }
   }
 
-  // Store to history
-  if (conversationHistory.length === 0 || (conversationHistory.length === 1 && conversationHistory[0].role === 'user')) {
-    conversationHistory.push({ role: 'assistant', content: fullResponse })
-  } else {
-    conversationHistory[conversationHistory.length - 1] = { role: 'assistant', content: fullResponse }
-  }
+  conversationHistory.push({ role: 'assistant', content: fullResponse })
 
   const cursor = responseArea.querySelector('.cursor-blink')
   if (cursor) (cursor as HTMLElement).style.display = 'none'
   isStreaming = false
   chatInput.disabled = false
   chatSendBtn.disabled = false
+  chatBar.style.display = 'flex'
+  zoomHintBar.style.display = 'block'
   chatInput.focus()
 }).catch(console.error)
 
@@ -275,7 +271,7 @@ function appendChatBubble(role: string, content: string) {
   scrollIfAtBottom()
 }
 
-function appendImageBubble(imageB64: string) {
+function createImageBubble(imageB64: string): HTMLElement {
   const bubble = document.createElement('div')
   bubble.className = 'chat-bubble user has-image'
   const img = document.createElement('img')
@@ -283,7 +279,6 @@ function appendImageBubble(imageB64: string) {
   img.alt = 'Screenshot'
   bubble.appendChild(img)
 
-  // Click to toggle expanded view
   let expanded = false
   bubble.addEventListener('click', () => {
     expanded = !expanded
@@ -294,7 +289,11 @@ function appendImageBubble(imageB64: string) {
     }
   })
 
-  responseArea.appendChild(bubble)
+  return bubble
+}
+
+function appendImageBubble(imageB64: string) {
+  responseArea.appendChild(createImageBubble(imageB64))
   scrollIfAtBottom()
 }
 

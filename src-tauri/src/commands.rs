@@ -143,6 +143,13 @@ pub async fn crop_and_ask(
 
     let prompt = custom_prompt.unwrap_or_else(|| config.system_prompt.clone());
 
+    // Emit cropped image immediately so frontend shows it before AI streaming
+    let cropped_b64 = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &cropped);
+    let _ = app.emit("show-screenshot", serde_json::json!({
+        "image": cropped_b64,
+        "prompt": prompt
+    }));
+
     let result = match config.api_type {
         ApiType::Ollama => {
             ollama::ask_ollama(
