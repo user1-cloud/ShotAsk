@@ -13,7 +13,7 @@ mod screenshot;
 
 use commands::AppState;
 
-pub(crate) static OVERLAY_ACTIVE: AtomicBool = AtomicBool::new(false);
+pub(crate) static SCREENSHOT_ACTIVE: AtomicBool = AtomicBool::new(false);
 
 pub fn register_global_shortcut(
     app: &tauri::AppHandle,
@@ -28,13 +28,13 @@ pub fn register_global_shortcut(
     app.global_shortcut()
         .on_shortcut(sc, move |_app, _sc, event| {
             if event.state == ShortcutState::Pressed {
-                if OVERLAY_ACTIVE.swap(true, Ordering::SeqCst) {
+                if SCREENSHOT_ACTIVE.swap(true, Ordering::SeqCst) {
                     return;
                 }
                 let h = h.clone();
                 tauri::async_runtime::spawn(async move {
                     trigger_screenshot_flow(&h).await;
-                    OVERLAY_ACTIVE.store(false, Ordering::SeqCst);
+                    SCREENSHOT_ACTIVE.store(false, Ordering::SeqCst);
                 });
             }
         })
@@ -260,13 +260,18 @@ pub async fn trigger_screenshot_flow(app: &tauri::AppHandle) {
         let _ = result_win.emit("reset-content", ());
     }
 
-    // Capture screenshot FIRST — before showing overlay, so the overlay
-    // itself doesn't appear in the captured image.
+    // Remember whether main window was visible, then hide it so it doesn't
+    // appear in the screenshot.
+    let was_main_visible = app.get_webview_window("main")
+        .map(|w| w.is_visible().unwrap_or(false))
+        .unwrap_or(false);
+    let _ = app.get_webview_window("main").map(|w| w.hide());
+
     let screenshot_data = match screenshot::capture_fullscreen() {
         Ok(data) => data,
         Err(e) => {
             log::error!("Screenshot failed: {}", e);
-            OVERLAY_ACTIVE.store(false, Ordering::SeqCst);
+            SCREENSHOT_ACTIVE.store(false, Ordering::SeqCst);
             return;
         }
     };
@@ -279,11 +284,14 @@ pub async fn trigger_screenshot_flow(app: &tauri::AppHandle) {
         }
     }
 
-    // Now show overlay as true fullscreen (covers taskbar) with the screenshot
-    if let Some(overlay) = app.get_webview_window("overlay") {
-        let _ = overlay.set_fullscreen(true);
-        let _ = overlay.show();
-        let _ = overlay.set_focus();
-        let _ = overlay.emit("screenshot-data", serde_json::json!({ "image": b64 }));
+    // Show main window fullscreen for region selection
+    if let Some(main_win) = app.get_webview_window("main") {
+        let _ = main_win.show();
+        let _ = main_win.set_focus();
+        let _ = main_win.set_fullscreen(true);
+        let _ = main_win.emit("screenshot-data", serde_json::json!({
+            "image": b64,
+            "wasMainVisible": was_main_visible,
+        }));
     }
 }

@@ -412,3 +412,39 @@ html, body {
   z-index: 100;
   box-shadow: 0 0 8px rgba(0, 240, 255, 0.4);
 }
+
+/* ============================================
+   SELECTION OVERLAY
+   ============================================ */
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes selection-glow {
+  0%, 100% { border-color: rgba(0, 240, 255, 0.4); }
+  50% { border-color: rgba(0, 240, 255, 0.9); }
+}
+
+#sel-selection {
+  animation: selection-glow 1.5s ease-in-out infinite;
+}
+
+/* Corner accents */
+#sel-selection::before {
+  content: '';
+  position: absolute;
+  top: -2px; left: -2px;
+  width: 12px; height: 12px;
+  border-top: 2px solid var(--phosphor-cyan);
+  border-left: 2px solid var(--phosphor-cyan);
+}
+
+#sel-selection::after {
+  content: '';
+  position: absolute;
+  bottom: -2px; right: -2px;
+  width: 12px; height: 12px;
+  border-bottom: 2px solid var(--phosphor-cyan);
+  border-right: 2px solid var(--phosphor-cyan);
+}

@@ -5,8 +5,9 @@ import { marked } from 'marked'
 import katex from 'katex'
 import 'katex/dist/katex.min.css'
 import { initZoom, getZoom, setZoom } from './zoom'
-import { t, applyI18n } from './i18n'
+import { t, applyI18n, detectLanguage, setLanguage } from './i18n'
 
+detectLanguage()
 applyI18n()
 
 // --- LaTeX inline math extension for marked ---
@@ -106,11 +107,15 @@ listen<{ zoom: number }>('restore-zoom', (event) => {
   setZoom(event.payload.zoom)
 }).catch(console.error)
 
+// Live language switch from main window
+listen<{ lang: 'zh-CN' | 'en' }>('language-changed', (event) => {
+  setLanguage(event.payload.lang)
+}).catch(console.error)
+
 const responseArea = document.getElementById('response-area')!
 const chatInput = document.getElementById('chat-input') as HTMLInputElement
 const chatSendBtn = document.getElementById('chat-send-btn') as HTMLButtonElement
 const chatBar = document.getElementById('chat-bar')!
-const zoomHintBar = document.getElementById('zoom-hint-bar')!
 
 let isStreaming = false
 let fullResponse = ''
@@ -192,7 +197,6 @@ listen<{ text: string; image?: string; prompt?: string }>('ai-response', (event)
   chatInput.disabled = false
   chatSendBtn.disabled = false
   chatBar.style.display = 'flex'
-  zoomHintBar.style.display = 'block'
   chatInput.focus()
 }).catch(console.error)
 
@@ -318,7 +322,6 @@ function resetContent() {
   screenshotB64 = ''
   conversationHistory = []
   chatBar.style.display = 'none'
-  zoomHintBar.style.display = 'none'
   chatInput.value = ''
   chatInput.disabled = true
   chatSendBtn.disabled = true

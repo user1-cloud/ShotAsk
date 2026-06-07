@@ -24,21 +24,7 @@
         "visible": true,
         "url": "/"
       },
-      {
-        "label": "overlay",
-        "title": "",
-        "width": 1920,
-        "height": 1080,
-        "center": false,
-        "resizable": false,
-        "decorations": false,
-        "transparent": true,
-        "alwaysOnTop": true,
-        "skipTaskbar": true,
-        "visible": false,
-        "url": "/overlay.html"
-      },
-      {
+{
         "label": "result",
         "title": "ShotAsk",
         "width": 440,

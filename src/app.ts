@@ -1,7 +1,8 @@
 import { invoke } from '@tauri-apps/api/core'
 import { getCurrentWindow } from '@tauri-apps/api/window'
+import { listen, emit } from '@tauri-apps/api/event'
 import { initZoom } from './zoom'
-import { t, getLanguage, setLanguage } from './i18n'
+import { t, getLanguage, setLanguage, applyI18n } from './i18n'
 
 interface AppConfig {
   shortcut: string
@@ -430,12 +431,76 @@ export function mountApp(root: HTMLElement) {
         </span>
       </footer>
     </div>
+
+    <!-- Selection overlay (hidden by default, shown for screenshot region selection) -->
+    <div id="selection-overlay" style="
+      display:none;
+      position:fixed;inset:0;
+      z-index:1000;
+      cursor:crosshair;
+      user-select:none;-webkit-user-select:none;
+    ">
+      <div id="sel-bg-image" style="
+        position:absolute;inset:0;
+        background-size:cover;
+        background-position:center;
+        background-repeat:no-repeat;
+        filter:brightness(0.55) saturate(0.8);
+      "></div>
+      <div id="sel-selection" style="
+        position:absolute;
+        border:1.5px solid var(--phosphor-cyan);
+        background:rgba(0,240,255,0.04);
+        box-shadow:0 0 6px rgba(0,240,255,0.2),inset 0 0 6px rgba(0,240,255,0.06);
+        pointer-events:none;
+        z-index:100;
+        display:none;
+      "></div>
+      <div id="sel-size-indicator" style="
+        position:absolute;pointer-events:none;z-index:101;display:none;
+        font-family:'JetBrains Mono',monospace;font-size:10px;
+        color:var(--phosphor-cyan);
+        background:rgba(1,1,9,0.85);
+        border:1px solid rgba(0,240,255,0.3);
+        padding:3px 8px;letter-spacing:1px;
+        text-shadow:0 0 4px rgba(0,240,255,0.5);
+      "></div>
+      <div id="sel-hint" style="
+        position:absolute;top:50%;left:50%;
+        transform:translate(-50%,-50%);
+        color:rgba(0,240,255,0.6);
+        font-family:'JetBrains Mono',monospace;
+        font-size:13px;letter-spacing:3px;
+        pointer-events:none;z-index:60;
+        text-shadow:0 0 10px rgba(0,0,0,0.9);
+        text-align:center;
+      ">
+        <span data-i18n="overlay.dragHint">DRAG TO SELECT REGION</span>
+        <span style="display:block;font-size:9px;color:rgba(0,240,255,0.4);margin-top:4px;letter-spacing:2px" data-i18n="overlay.escHint">ESC TO CANCEL</span>
+      </div>
+      <div id="sel-loading" style="
+        position:absolute;top:50%;left:50%;
+        transform:translate(-50%,-50%);
+        display:none;z-index:200;text-align:center;
+      ">
+        <div style="width:48px;height:48px;margin:0 auto 16px;position:relative">
+          <div style="position:absolute;inset:4px;border:2px solid rgba(0,240,255,0.1);border-top-color:var(--phosphor-cyan);border-radius:50%;animation:spin 1s linear infinite;box-shadow:0 0 16px rgba(0,240,255,0.2)"></div>
+          <div style="position:absolute;inset:10px;border:1.5px solid rgba(0,240,255,0.06);border-bottom-color:rgba(0,240,255,0.3);border-radius:50%;animation:spin 1.5s linear infinite reverse"></div>
+        </div>
+        <div style="color:var(--phosphor-cyan);font-family:'Orbitron',sans-serif;font-size:11px;letter-spacing:5px" data-i18n="result.analyzing">ANALYZING</div>
+        <div style="color:rgba(0,240,255,0.5);font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:3px;margin-top:6px" data-i18n="overlay.sending">SENDING TO AI MODEL</div>
+      </div>
+    </div>
   `
+
+  // Apply translations to all data-i18n elements (selection overlay etc.)
+  applyI18n(document)
 
   initDataStreams()
   initRippleEffect()
   loadConfig()
   bindEvents()
+  initSelectionMode()
   initZoom()
 
   // Debounced save of main window position/size on every move/resize
@@ -597,7 +662,9 @@ function bindEvents() {
   }
   updateLangBtn()
   langBtn.addEventListener('click', () => {
-    setLanguage(getLanguage() === 'zh-CN' ? 'en' : 'zh-CN')
+    const newLang = getLanguage() === 'zh-CN' ? 'en' : 'zh-CN'
+    setLanguage(newLang)
+    emit('language-changed', { lang: newLang }).catch(() => {})
     location.reload()
   })
 
@@ -662,8 +729,11 @@ function bindEvents() {
 
   document.getElementById('save-btn')!.addEventListener('click', async () => {
     if (!config) return
+    // Reload from backend so window-geometry fields (saved by other windows)
+    // aren't overwritten with stale values from startup.
+    const fresh = await invoke<AppConfig>('get_config').catch(() => config)
     const newConfig: AppConfig = {
-      ...config,
+      ...fresh,
       shortcut: (document.getElementById('shortcut-field') as HTMLInputElement).value,
       api_type: currentApiType,
       ollama_endpoint: (document.getElementById('ollama-endpoint') as HTMLInputElement).value,
@@ -750,4 +820,123 @@ function showStatus(msg: string, type: StatusType) {
       el.style.textShadow = ''
     }
   }, 4000)
+}
+
+// --- Selection mode (screenshot region selection, replaces separate overlay window) ---
+
+function initSelectionMode() {
+  const selOverlay = document.getElementById('selection-overlay')!
+  const selBgImage = document.getElementById('sel-bg-image')!
+  const selSelection = document.getElementById('sel-selection')!
+  const selHint = document.getElementById('sel-hint')!
+  const selLoading = document.getElementById('sel-loading')!
+  const selSizeIndicator = document.getElementById('sel-size-indicator')!
+  const vignetteOverlay = document.querySelector('.vignette-overlay') as HTMLElement
+
+  let startX = 0, startY = 0, isSelecting = false
+  let screenshotReady = false
+  let wasMainVisible = true
+
+  function restoreSettings(hideWindow: boolean) {
+    selOverlay.style.display = 'none'
+    screenshotReady = false
+    if (hideWindow) {
+      getCurrentWindow().hide().catch(() => {})
+    } else {
+      vignetteOverlay.style.display = 'flex'
+    }
+  }
+
+  // Backend already shows the window fullscreen before emitting this event
+  listen<{ image: string; wasMainVisible: boolean }>('screenshot-data', (event) => {
+    wasMainVisible = event.payload.wasMainVisible
+    vignetteOverlay.style.display = 'none'
+    selOverlay.style.display = 'block'
+    selLoading.style.display = 'block'
+    selHint.style.opacity = '0'
+    selSelection.style.display = 'none'
+    selSizeIndicator.style.display = 'none'
+    screenshotReady = false
+
+    selBgImage.style.backgroundImage = `url(data:image/png;base64,${event.payload.image})`
+    selLoading.style.display = 'none'
+    selHint.style.opacity = '1'
+    screenshotReady = true
+  }).catch(console.error)
+
+  document.addEventListener('mousedown', (e) => {
+    if (!screenshotReady) return
+    if (selOverlay.style.display === 'none') return
+    if (e.button !== 0) return
+    isSelecting = true
+    startX = e.clientX
+    startY = e.clientY
+    selSelection.style.display = 'block'
+    selSelection.style.left = startX + 'px'
+    selSelection.style.top = startY + 'px'
+    selSelection.style.width = '0px'
+    selSelection.style.height = '0px'
+    selHint.style.opacity = '0'
+    selSizeIndicator.style.display = 'block'
+  })
+
+  document.addEventListener('mousemove', (e) => {
+    if (!isSelecting) return
+    const x = Math.min(startX, e.clientX)
+    const y = Math.min(startY, e.clientY)
+    const w = Math.abs(e.clientX - startX)
+    const h = Math.abs(e.clientY - startY)
+
+    selSelection.style.left = x + 'px'
+    selSelection.style.top = y + 'px'
+    selSelection.style.width = w + 'px'
+    selSelection.style.height = h + 'px'
+
+    selSizeIndicator.textContent = `${Math.round(w)} × ${Math.round(h)}`
+    selSizeIndicator.style.left = (e.clientX + 16) + 'px'
+    selSizeIndicator.style.top = (e.clientY + 16) + 'px'
+  })
+
+  document.addEventListener('mouseup', async (e) => {
+    if (!isSelecting) return
+    isSelecting = false
+
+    const x = Math.min(startX, e.clientX)
+    const y = Math.min(startY, e.clientY)
+    const w = Math.abs(e.clientX - startX)
+    const h = Math.abs(e.clientY - startY)
+
+    selSizeIndicator.style.display = 'none'
+
+    if (w < 10 || h < 10) {
+      selSelection.style.display = 'none'
+      selHint.style.opacity = '1'
+      return
+    }
+
+    selSelection.style.display = 'none'
+
+    const win = getCurrentWindow()
+    await win.setFullscreen(false)
+    restoreSettings(!wasMainVisible)
+
+    const dpr = window.devicePixelRatio || 1
+    invoke('crop_and_ask', {
+      x: Math.round(x * dpr), y: Math.round(y * dpr),
+      width: Math.round(w * dpr), height: Math.round(h * dpr),
+      customPrompt: null,
+    }).catch(async (e) => {
+      console.error('crop_and_ask failed:', e)
+      const { emit } = await import('@tauri-apps/api/event')
+      await emit('ai-response', { text: 'ERROR: ' + String(e) })
+    })
+  })
+
+  document.addEventListener('keydown', async (e) => {
+    if (e.key === 'Escape' && selOverlay.style.display !== 'none') {
+      const win = getCurrentWindow()
+      await win.setFullscreen(false)
+      restoreSettings(!wasMainVisible)
+    }
+  })
 }
