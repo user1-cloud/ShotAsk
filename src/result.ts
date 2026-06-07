@@ -37,9 +37,16 @@ marked.use({
 })
 
 function renderMarkdown(text: string): string {
+  // Step 0: Normalize LaTeX delimiters AI models commonly use
+  // \[...\] → $$...$$  (display math)
+  // \(...\) → $...$    (inline math)
+  let normalized = text
+    .replace(/\\\[([\s\S]*?)\\]/g, (_, math: string) => `$$${math}$$`)
+    .replace(/\\\(([\s\S]*?)\\\)/g, (_, math: string) => `$${math}$`)
+
   // Step 1: Extract $$...$$ display math blocks into markers
   const blocks: string[] = []
-  const safe = text.replace(/\$\$([\s\S]*?)\$\$/g, (_, math: string) => {
+  const safe = normalized.replace(/\$\$([\s\S]*?)\$\$/g, (_, math: string) => {
     const i = blocks.length
     blocks.push(math.trim())
     return `\x00KATEX${i}\x00`
@@ -155,10 +162,6 @@ listen<{ text: string }>('ai-stream-chunk', (event) => {
 
 // Final response (first screenshot analysis only — follow-ups handled in sendFollowUp)
 listen<{ text: string; image?: string; prompt?: string }>('ai-response', (event) => {
-  if (event.payload.image) {
-    screenshotB64 = event.payload.image
-  }
-
   if (!isStreaming && event.payload.text) {
     fullResponse = event.payload.text
   }
@@ -172,10 +175,6 @@ listen<{ text: string; image?: string; prompt?: string }>('ai-response', (event)
   if (existingAssistant) {
     // Streaming case: bubble already created during streaming, finalize it
     existingAssistant.innerHTML = renderMarkdown(fullResponse) as string
-    if (event.payload.image && !responseArea.querySelector('.chat-bubble.user.has-image')) {
-      const imgBubble = createImageBubble(event.payload.image)
-      existingAssistant.before(imgBubble)
-    }
   } else {
     // Non-streaming case: create bubbles from scratch
     responseArea.innerHTML = ''
