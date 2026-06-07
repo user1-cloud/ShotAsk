@@ -840,10 +840,9 @@ function initSelectionMode() {
   function restoreSettings(hideWindow: boolean) {
     selOverlay.style.display = 'none'
     screenshotReady = false
+    vignetteOverlay.style.display = 'flex'
     if (hideWindow) {
       getCurrentWindow().hide().catch(() => {})
-    } else {
-      vignetteOverlay.style.display = 'flex'
     }
   }
 
